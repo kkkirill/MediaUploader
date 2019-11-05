@@ -2,11 +2,34 @@
     display: inline-block;
     width: 300px;
     height: 300px;
+    /* background: no-repeat url('../img/shrek.jpeg'); */
     background-image: url('../img/shrek.jpeg');
     background-size: 300px 300px;
     background-repeat: no-repeat;
 }
 
+.pseudo-image::before {
+    content: "";
+    float: left;
+    width: 32px;
+    height: 32px;
+    margin: 0 5px 0 0;
+    background-image: url('../img/shrek.jpeg');
+    background-repeat: round;
+}
+
+.pseudo-image::after {
+    content: "";
+    float: left;
+    width: 64px;
+    height: 64px;
+    margin: 0 5px 0 0;
+    background-image: url('../img/shrek.jpeg');
+    background-repeat: round;
+}
+
 .fake-image {
     display: inline-block;
+    width: 300px;
+    height: 100%;
 }

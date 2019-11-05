@@ -1,18 +1,20 @@
-function genericOnClick(info, tab) {
-    console.log(info);
-    let msg = {
-        txt: "HELLO"
+function processSource(response) {
+    console.log(response);
+}
+
+function contextMenuOnClick(info, tab) {
+    const msg = {
+        command: "getData"
     }
-    chrome.tabs.sendMessage(tab.id, msg);
+    chrome.tabs.sendMessage(tab.id, msg, processSource);
 }
 
 window.onload = () => {
-    const contexts = ["page","selection","link","editable","image","video","audio"];
-
-    for (context of contexts) {
-        const id = chrome.contextMenus.create({"title": "Send to Site.com", "contexts":[context],
-                                           "onclick": genericOnClick});
-        console.log(`${context} item: ${id}`);
-    }
+    chrome.contextMenus.create(
+        {"title": "Send to Site.com",
+         "contexts": ["all"],
+         "onclick": contextMenuOnClick
+        }
+    );
 }
 
