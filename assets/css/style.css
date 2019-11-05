@@ -24,7 +24,8 @@
     width: 64px;
     height: 64px;
     margin: 0 5px 0 0;
-    background-image: url('../img/shrek.jpeg');
+    background-image: url('../img/test.jpg');
+    /* background-image: url('../img/shrek.jpeg'); */
     background-repeat: round;
 }
 

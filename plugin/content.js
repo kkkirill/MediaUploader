@@ -1,9 +1,44 @@
+function getSourcesFromStyle() {
+    const styles = [
+        getComputedStyle(targetElement), 
+        getComputedStyle(targetElement, ':after'), 
+        getComputedStyle(targetElement, ':before')
+    ];
+    //  TODO 
+    //  replace slice with regex?
+    const sources = styles.map(e => e.backgroundImage.slice(5, -2)).filter(e => e);
+    if (sources.length) {
+        const groupedSources = sources.reduce((accumulator, currentValue) => {
+            const fieldName = currentValue.startsWith('data:') ? 'data' : 'url';
+            if (accumulator[fieldName])
+                return {...accumulator, [fieldName]: accumulator[fieldName].concat(currentValue)};
+            else
+                return {...accumulator, [fieldName]: [currentValue]};
+        }, {});
+        return groupedSources;
+    }
+    return {'data': [], 'url': []};
+}
+
 function getData() {
-    const selection = !resultMediaUrl ? window.getSelection().toString() : '';
-    const statusCode = resultMediaUrl || selection ? 200 : 204;
-    const data = {statusCode: statusCode, url: resultMediaUrl, text: selection};
-    resultMediaUrl = null;
-    return data;
+    let urls = [], data = [];
+    switch (targetElement.tagName) {
+        case "AUDIO":
+        case "VIDEO":
+            urls.push(targetElement.firstElementChild.src);
+            break;
+        case "IMG":
+            urls.push(targetElement.currentSrc);
+            break;
+        default:
+            const groupedSources = getSourcesFromStyle();
+            urls.push(...new Set(groupedSources.url));
+            data.push(...new Set(groupedSources.data));
+            break;
+    }
+    const text = !(urls.length || data.length) ? window.getSelection().toString() : ''; 
+    const statusCode = urls.length || data.length || text ? 200 : 204;
+    return {statusCode: statusCode, urls: urls, data: data, text: text}
 }
 
 function handleMessage(request, sender, sendResponse) {
@@ -11,61 +46,10 @@ function handleMessage(request, sender, sendResponse) {
     sendResponse({statusCode: statusCode, ...window[request.command]()});
 }
 
-function getSrcFromElement(e) {
-    switch (e.target.tagName) {
-        case "AUDIO":
-        case "VIDEO":
-            resultMediaUrl = e.target.firstElementChild.src;
-            break;
-        case "IMG":
-            resultMediaUrl = e.target.currentSrc;
-            break;
-        default:
-            //  TODO
-            //
-            // add check is backroundImage url contain link or encoded image (like base64)
-            // if url contain envoded data send it as another field in result object
-            resultMediaUrl = getComputedStyle(e.target).backgroundImage.slice(5, -2);
-            console.log(e.target.tagName);
-            console.log(resultMediaUrl);
-            break;
-    }
-}
-
 function main(isAddFlag=true) {
-    resultMediaUrl = null;
     chrome.runtime.onMessage.addListener(handleMessage);
-
-    let videos = document.getElementsByTagName("video");
-    let images = document.getElementsByTagName('img');
-    //  TODO 
-    //
-    //  correct processing of pseudo elements
-    //  if it possible add styles info to hiddenImages array (it will become array of objects)
-    let hiddenImages = [].filter.call(
-        document.querySelectorAll('*'), 
-        element => {
-            let styles = [
-                getComputedStyle(element), 
-                getComputedStyle(element, 'before'), 
-                getComputedStyle(element, ':after'), 
-            ];
-            return [].some.call(styles, (style) => style.backgroundImage !== 'none');
-        }
-        );
-    let audios = document.getElementsByTagName("audio");
     const manageEventListener = isAddFlag ? 'addEventListener' : 'removeEventListener';
-    
-    [].forEach.call(videos, element => element[manageEventListener]('contextmenu', getSrcFromElement));
-    [].forEach.call(audios, element => element[manageEventListener]('contextmenu', getSrcFromElement));
-    [].forEach.call(images, element => element[manageEventListener]('contextmenu', getSrcFromElement));
-    hiddenImages.forEach(element => {
-        element[manageEventListener]('contextmenu', getSrcFromElement);
-    });
-} 
-
-function stopHandling() {
-    main(false);
+    document[manageEventListener]('contextmenu', e => targetElement = e.target);
 }
 
 window.onload = main;
