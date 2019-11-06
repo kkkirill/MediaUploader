@@ -1,11 +1,12 @@
 function getSourcesFromStyle() {
     const styles = [
-        getComputedStyle(targetElement), 
-        getComputedStyle(targetElement, ':after'), 
-        getComputedStyle(targetElement, ':before')
+        getComputedStyle(targetEvent.target), 
+        getComputedStyle(targetEvent.target, ':after'), 
+        getComputedStyle(targetEvent.target, ':before')
     ];
-    //  TODO 
-    //  replace slice with regex?
+    //  TODO
+    //  pseudo elements send only 1 concrete (calculating through offsets/sth else)
+    
     const sources = styles.map(e => e.backgroundImage.slice(5, -2)).filter(e => e);
     if (sources.length) {
         const groupedSources = sources.reduce((accumulator, currentValue) => {
@@ -22,13 +23,13 @@ function getSourcesFromStyle() {
 
 function getData() {
     let urls = [], data = [];
-    switch (targetElement.tagName) {
+    switch (targetEvent.target.tagName) {
         case "AUDIO":
         case "VIDEO":
-            urls.push(targetElement.firstElementChild.src);
+            urls.push(targetEvent.target.firstElementChild.src);
             break;
         case "IMG":
-            urls.push(targetElement.currentSrc);
+            urls.push(targetEvent.target.currentSrc);
             break;
         default:
             const groupedSources = getSourcesFromStyle();
@@ -49,15 +50,42 @@ function handleMessage(request, sender, sendResponse) {
 function main(isAddFlag=true) {
     chrome.runtime.onMessage.addListener(handleMessage);
     const manageEventListener = isAddFlag ? 'addEventListener' : 'removeEventListener';
-    document[manageEventListener]('contextmenu', e => targetElement = e.target);
+    document[manageEventListener]('contextmenu', e => {
+        //  REPLACED target on targetEvent
+        targetElement = e.target;
+        targetEvent = e;
+        console.log(e);
+    });
 }
 
 window.onload = main;
 
-// ------------------------------
+// ----------------------------------------------------------------------------
 // let iframes = document.getElementsByTagName("iframe");
 // console.log([...iframes]);
 // ------------------------------
 // TODO add iframes support
 //  [...iframes].forEach(element => {
 //     element.addEventListener('blur', iframeTagHandler);
+// ----------------------------------------------------------------------------
+
+
+
+// ----------------------------------------------------------------------------
+// console.log('offsetX: ', targetEvent.offsetX, 'offsetY: ', targetEvent.offsetY, 
+// 'offsetLeft: ', targetEvent.target.offsetLeft, 'offsetWidth: ', targetEvent.target.offsetWidth);
+// console.log(styles);
+
+
+// console.log(targetEvent.target);
+
+// let targetName = targetEvent.target.tagName.toLowerCase();
+// if (targetEvent.target.className)
+//     targetName = targetName.concat(`.${targetEvent.target.className}`);
+// else if (targetEvent.target.id) 
+//     targetName = targetName.concat(`#${targetEvent.target.id}`);
+// console.log(targetName);
+// const before = targetEvent.target.parentElement.querySelector(targetName, ':before');
+// const after = targetEvent.target.parentElement.querySelector(targetName, ':after');
+// console.log(before, after);
+// -----------------------------------------------------------------------------
