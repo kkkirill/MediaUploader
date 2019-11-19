@@ -1,15 +1,12 @@
 "use strict";
 
-// 100 MB in bytes 104857600
-// 100 GB in bytes 107374182400
-
 const OPTIONS = {
     MAXSIZE: 10485760, // 10 MB
     VIDEOMAXSIZE: 524288000, // 500 MB
     TARGETURL: 'http://127.0.0.1:5000/'
 }
 
-async function toDataUrl(url) {
+async function toDataURI(url) {
     return fetch(url)
         .then(response => response.blob())
         .then(blob => new Promise((resolve, reject) => {
@@ -23,7 +20,7 @@ async function toDataUrl(url) {
 
 async function getDataFromUrl(src) {
     if (src.startsWith('data:')) {
-        return { url: '', data: src, filename: '', size: 0 };
+        return { url: '', dataURI: src, filename: '', size: 0 };
     }
 
     try {
@@ -33,15 +30,15 @@ async function getDataFromUrl(src) {
         const filename = src.split('#').shift().split('?').shift().split('/').pop();
 
         if (contentLength > OPTIONS[contentType.startsWith('video') ? 'VIDEOMAXSIZE' : 'MAXSIZE']) {
-            return { data: '', filename: filename, size: contentLength };
+            return { dataURI: '', filename: filename, size: contentLength };
         }
 
-        const data = await toDataUrl(src);
+        const dataURI = await toDataURI(src);
 
-        return { data: data, filename: filename, size: contentLength };
+        return { dataURI: dataURI, filename: filename, size: contentLength };
     }
     catch (err) {
-        return { data: '', filename: '', size: 0 };
+        return { dataURI: '', filename: '', size: 0 };
     }
 }
 
@@ -64,7 +61,8 @@ function handleData(contentData) {
                 srcPageUrl: tabs[0].url,
                 time: curTime
             });
-
+            
+            console.log('Object for sending: ', contentData);
             fetch(OPTIONS.TARGETURL, {
                 method: 'post',
                 headers: {
@@ -82,11 +80,10 @@ function contextMenuOnClick(info, tab) {
     const msg = {
         command: "getData"
     }
-
     chrome.tabs.sendMessage(tab.id, msg, handleData);
 }
 
-window.onload = () => {
+chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create(
         {
             "title": "Send to Site.com",
@@ -94,5 +91,4 @@ window.onload = () => {
             "onclick": contextMenuOnClick
         }
     );
-}
-
+});
