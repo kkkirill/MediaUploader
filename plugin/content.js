@@ -24,7 +24,7 @@ function getPropsFromStyle() {
     }
 
     const value = targetSrc.backgroundImage.replace(/url\((['"])?(.*?)\1\)/gi, '$2').split(', ')[0];
-    const propName = isEncodedDataURI(value) ? 'data' : 'url';
+    const propName = isEncodedDataURI(value) ? 'dataURI' : 'url';
     const image = new Image();
     image.src = value;
 
@@ -36,7 +36,7 @@ function getPropsFromStyle() {
 }
 
 function getData() {
-    const response = {
+    const contentData = {
         url: '',
         dataURI: '',
         width: 0,
@@ -46,43 +46,43 @@ function getData() {
     const targets = document.elementsFromPoint(window.targetEvent.clientX, window.targetEvent.clientY);
 
     for (const target of targets) {
-        const propName = target.currentSrc && isEncodedDataURI(target.currentSrc) ? 'data' : 'url';
+        const propName = target.currentSrc && isEncodedDataURI(target.currentSrc) ? 'dataURI' : 'url';
 
         switch (target.tagName) {
             case "AUDIO":
-                response[propName] = target.currentSrc;
+                contentData[propName] = target.currentSrc;
                 break;
             case "VIDEO":
-                response[propName] = target.currentSrc;
-                response.width = target.videoWidth;
-                response.height = target.videoHeight;
+                contentData[propName] = target.currentSrc;
+                contentData.width = target.videoWidth;
+                contentData.height = target.videoHeight;
                 break;
             case "IMG":
-                response[propName] = target.currentSrc;
-                response.width = target.naturalWidth;
-                response.height = target.naturalHeight;
+                contentData[propName] = target.currentSrc;
+                contentData.width = target.naturalWidth;
+                contentData.height = target.naturalHeight;
                 break;
             default:
                 if (target.parentElement && target.parentElement.tagName === 'svg') {
                     const svgRect = target.getBoundingClientRect();
 
-                    response.data = btoa(target.outerHTML);
-                    response.width = svgRect.width;
-                    response.height = svgRect.height;
+                    contentData.data = btoa(target.outerHTML);
+                    contentData.width = svgRect.width;
+                    contentData.height = svgRect.height;
                 }
                 else {
                     const src = getPropsFromStyle();
-                    Object.assign(response, src);
+                    Object.assign(contentData, src);
                 }
                 break;
         }
-        response.text = !(response.url || response.data) ? window.getSelection().toString() : '';
+        contentData.text = !(contentData.url || contentData.data) ? window.getSelection().toString() : '';
 
-        if (Object.values(response).some(Boolean) && target.tagName != 'HTML') {
+        if (Object.values(contentData).some(Boolean) && target.tagName != 'HTML') {
             break;
         }
     }
-    return response;
+    return contentData;
 }
 
 function handleMessage(request, sender, sendResponse) {
@@ -94,7 +94,6 @@ function onContextMenuHandler(e) {
 }
 
 function main(isAddFlag = true) {
-    console.log('event listeners added');
     chrome.runtime.onMessage.addListener(handleMessage);
     const manageEventListener = isAddFlag ? 'addEventListener' : 'removeEventListener';
     document[manageEventListener]('contextmenu', onContextMenuHandler);

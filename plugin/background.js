@@ -63,15 +63,17 @@ function handleData(contentData) {
             });
             
             console.log('Object for sending: ', contentData);
-            fetch(OPTIONS.TARGETURL, {
-                method: 'post',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(contentData)
-            })
-            .then(res => "Inform user about success");
+            
+            // fetch(OPTIONS.TARGETURL, {
+            //     method: 'post',
+            //     headers: {
+            //         'Accept': 'application/json',
+            //         'Content-Type': 'application/json'
+            //     },
+            //     body: JSON.stringify(contentData)
+            // })
+            // .then(res => "Inform user about success")
+            // .catch(err => "Error");
         }
     );
 }
