@@ -2,20 +2,19 @@
     "name": "MediaUploader",
     "version": "1.0",
     "description": "Extension for uploading concrete media files to server",
-    "permissions": ["storage", "contextMenus", "activeTab"],
+    "permissions": ["storage", "contextMenus", "activeTab", "management"],
     "background": {
-      "scripts": ["background.js"]
+      "scripts": ["js/background.js"]
     },
     "content_scripts": [
       {
-        "matches": [
-          "<all_urls>"
-        ],
-        "js": ["content.js"]
+        "matches": ["<all_urls>"],
+        "css": ["css/hover.css"],
+        "js": ["js/content.js"]
       }
     ],
     "browser_action": {
-      "default_popup": "popup.html"
+      "default_popup": "html/popup.html"
      },
     "manifest_version": 2
   }

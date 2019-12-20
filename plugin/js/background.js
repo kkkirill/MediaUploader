@@ -43,7 +43,9 @@ async function getDataFromUrl(src) {
 }
 
 function handleData(contentData) {
-    if (!(contentData && Object.values(contentData).some(Boolean))) {
+    const content = contentData;
+    
+    if (!(content && Object.values(content).some(Boolean))) {
         return;
     }
 
@@ -51,36 +53,36 @@ function handleData(contentData) {
         async tabs => {
             const curTime = new Date().toUTCString();
 
-            if (!contentData.data && contentData.url) {
-                const res = await getDataFromUrl(contentData.url);
-
-                Object.assign(contentData, res);
+            if (!content.data && content.url) {
+                const res = await getDataFromUrl(content.url);
+                Object.assign(content, res);
             }
 
-            Object.assign(contentData, {
+            Object.assign(content, {
                 srcPageUrl: tabs[0].url,
                 time: curTime
             });
-            
-            console.log('Object for sending: ', contentData);
-            
-            // fetch(OPTIONS.TARGETURL, {
-            //     method: 'post',
-            //     headers: {
-            //         'Accept': 'application/json',
-            //         'Content-Type': 'application/json'
-            //     },
-            //     body: JSON.stringify(contentData)
-            // })
-            // .then(res => "Inform user about success")
-            // .catch(err => "Error");
+
+            console.log('Object for sending: ', content);
+
+            fetch(OPTIONS.TARGETURL, {
+                method: 'post',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(content)
+            })
+            .then(res => "Inform user about success")
+            .catch(err => "Error");
         }
     );
 }
 
 function contextMenuOnClick(info, tab) {
     const msg = {
-        command: "getData"
+        command: "getData",
+        args: []
     }
     chrome.tabs.sendMessage(tab.id, msg, handleData);
 }
