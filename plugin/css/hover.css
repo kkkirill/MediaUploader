@@ -2,3 +2,19 @@
     /* background-color: #b8b5b5; */
     /* background: yellow; */
 }
+
+
+.test-transition {
+    -webkit-transition: "opacity 0.6s";
+    -moz-transition: "opacity 0.6s";
+    -o-transition: "opacity 0.6s";
+    transition: "opacity 0.6s",
+
+}
+
+.test-notransition {
+    -webkit-transition: none !important;
+    -moz-transition: none !important;
+    -o-transition: none !important;
+    transition: none !important;
+}

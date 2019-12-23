@@ -113,16 +113,21 @@ function main(isAddFlag = true) {
             cssLinkHref: "../css/hover.css"
         }
     }
+    
     manageHoverEvents(isAddFlag);
     if (isAddFlag) {
         chrome.runtime.onMessage.addListener(handleMessage);
 
         let link = document.createElement('link');
+        link.setAttribute('rel', 'stylesheet');
+        link.setAttribute('type', 'text/css');
+        link.setAttribute('href', '../css/hover.css');
+        link.setAttribute('className', 'RANDOMNAME');
 
-        link.rel = "stylesheet";
-        link.type = "text/css";
-        link.href = "../css/hover.css";
-        link.className = "RANDOMNAME";
+        // link.rel = "stylesheet";
+        // link.type = "text/css";
+        // link.href = "../css/hover.css";
+        // link.className = "RANDOMNAME";
 
         document.querySelector('head').appendChild(link);
     }
@@ -148,8 +153,8 @@ function manageHoverEvents(isAddFlag = true) {
         const targets = document.querySelectorAll(tag);
         [].filter.call(targets, target => target.offsetHeight > minHeight && target.offsetWidth > minWidth)
                .forEach(target => {
-                   target[manageEventListenerAttr]('mouseover', changeDefOver);
-                   target[manageEventListenerAttr]('mouseout', changeDefOut);
+                   target[manageEventListenerAttr]('mouseenter', changeDefOver);
+                   target[manageEventListenerAttr]('mouseleave', changeDefOut);
                });
     });
 
@@ -157,20 +162,28 @@ function manageHoverEvents(isAddFlag = true) {
     const divsWithImages = [].filter.call(divs, elem =>
         getStylesFromElement(elem).length != 0 && elem.offsetWidth > minHeight && elem.offsetHeight > minWidth);
     divsWithImages.forEach(div => {
-        div[manageEventListenerAttr]('mouseover', changeDefOver);
-        div[manageEventListenerAttr]('mouseout', changeDefOut);
+        div[manageEventListenerAttr]('mouseenter', changeDefOver);
+        div[manageEventListenerAttr]('mouseleave', changeDefOut);
     });
 }
 
 function changeDefOver(e) {
-    // console.log("inside: ", e);
-    console.log(e.target);
     const button = document.createElement('button');
+    
+    button.id = "lol";       // TODO unique classname/id
+    [].push.call(button.classList, 'test-transition');
     button.onclick = () => {
         onContextMenuHandler();
         console.log('target: ', window.MUData.targetEvent);
     };
-    button.addEventListener('mouseover', () => button.style.opacity = 1);
+    
+    button.addEventListener('mouseover', () => {
+        // button.transition = "";
+        [].push.call(button.classList, 'test-notransition');
+        button.style.opacity = 1;
+        [].pop.call(button.classList);
+        // button.transition = "opacity 0.6s"; 
+    });
 
     const height = window.MUData.pin.height, width = window.MUData.pin.width;
     const paddingLeft = e.target.offsetLeft + e.target.offsetWidth - height - window.MUData.pin.paddingRight;
@@ -183,19 +196,27 @@ function changeDefOver(e) {
         height: `${height}px`,
         width: `${width}px`,
         opacity: 0,
-        transition: "opacity 0.6s",
-        backgroundColor: "red"
+        // transition: "opacity 0.6s",
+        backgroundColor: "red",
+        'z-index': 10000000000 
     });
-    document.body.appendChild(button);
-    setTimeout(() => button.style.opacity = 1, 10);
-    window.MUData.button = button;
 
+    console.log('Height: ', height, 'Width: ', width);
+    
+    setTimeout(() => button.style.opacity = 1, 10);
+
+    window.MUData.button = button;
+    // document.querySelectorAll('.lol').forEach(e => e.remove());
+    console.log('Added: ', window.MUData.button);
+
+    // window.MUData.button.remove();
+    e.target.parentElement.append(button);
 }
 
 function changeDefOut(e) {
-    // console.log("left from: ", e);
-    // console.log(window.MUData.button.style);
-    window.MUData.button.style.opacity = 0;
+    window.MUData.button.parentElement.querySelectorAll('#lol').forEach(e => e.remove());
+    // window.MUData.button.remove();
+    console.log('Removed');
 }
 
 window.addEventListener('load', main);
