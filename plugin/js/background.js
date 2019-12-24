@@ -44,7 +44,7 @@ async function getDataFromUrl(src) {
 
 function handleData(contentData) {
     const content = contentData;
-    
+
     if (!(content && Object.values(content).some(Boolean))) {
         return;
     }
@@ -73,13 +73,13 @@ function handleData(contentData) {
                 },
                 body: JSON.stringify(content)
             })
-            .then(res => "Inform user about success")
-            .catch(err => "Error");
+                .then(res => "Inform user about success")
+                .catch(err => "Error");
         }
     );
 }
 
-function contextMenuOnClick(info, tab) {
+function onContextMenuClick(info, tab) {
     const msg = {
         command: "getData",
         args: []
@@ -92,7 +92,14 @@ chrome.runtime.onInstalled.addListener(() => {
         {
             "title": "Send to Site.com",
             "contexts": ["all"],
-            "onclick": contextMenuOnClick
+            "onclick": onContextMenuClick
         }
     );
+});
+
+chrome.extension.onMessage.addListener(request => {
+    if (request == 'некий объект в фон') {
+        console.log('Принято: ', request); // Inform user about success
+        // handleData(request);
+    }
 });
