@@ -2,9 +2,13 @@
 
 const OPTIONS = {
     MAXSIZE: 10485760, // 10 MB
-    VIDEOMAXSIZE: 524288000, // 500 MB
-    TARGETURL: 'http://127.0.0.1:5000/'
-}
+    VIDEO_MAX_SIZE: 524288000, // 500 MB
+    TARGET_URL: 'http://127.0.0.1:5000/',
+    isBigContentLength: function (contentType, contentLength) {
+        const maxSize = contentType.startsWith('video') ? this.VIDEO_MAX_SIZE : this.MAXSIZE;
+        return contentLength > maxSize;
+    }
+};
 
 async function toDataURI(url) {
     return fetch(url)
@@ -18,88 +22,93 @@ async function toDataURI(url) {
         }));
 }
 
-async function getDataFromUrl(src) {
-    if (src.startsWith('data:')) {
-        return { url: '', dataURI: src, filename: '', size: 0 };
+async function getContentMetaFromUrl(src) {
+    const dataObj = {
+        url: '',
+        dataURI: '',
+        filename: '',
+        size: 0
+    };
+
+    if (!src.length) {
+        return {}
+    } else if (src.startsWith('data:')) {
+        return {url: '', dataURI: src, filename: '', size: 0};
     }
 
     try {
-        const response = await fetch(src, { method: 'HEAD' });
+        const response = await fetch(src, {method: 'HEAD'});
         const contentType = response.headers.get('Content-Type');
         const contentLength = parseInt(response.headers.get('Content-Length'));
         const filename = src.split('#').shift().split('?').shift().split('/').pop();
 
-        if (contentLength > OPTIONS[contentType.startsWith('video') ? 'VIDEOMAXSIZE' : 'MAXSIZE']) {
-            return { dataURI: '', filename: filename, size: contentLength };
+        if (OPTIONS.isBigContentLength(contentType, contentLength)) {
+            Object.assign(dataObj, {url: src, dataURI: '', filename: filename, size: contentLength});
         }
 
         const dataURI = await toDataURI(src);
 
-        return { dataURI: dataURI, filename: filename, size: contentLength };
+        Object.assign(dataObj, {url: src, dataURI: dataURI, filename: filename, size: contentLength});
+    } catch (err) {
+        Object.assign(dataObj, {url: '', dataURI: '', filename: '', size: 0});
     }
-    catch (err) {
-        return { dataURI: '', filename: '', size: 0 };
-    }
+
+    return dataObj;
 }
 
-function handleData(contentData) {
-    const content = contentData;
-
-    if (!(content && Object.values(content).some(Boolean))) {
+function handleData(content) {
+    if ('error' in content || !(content && Object.values(content).some(Boolean))) {
         return;
     }
 
-    chrome.tabs.query({ currentWindow: true, active: true },
-        async tabs => {
-            const curTime = new Date().toUTCString();
-
-            if (!content.data && content.url) {
-                const res = await getDataFromUrl(content.url);
-                Object.assign(content, res);
-            }
-
-            Object.assign(content, {
-                srcPageUrl: tabs[0].url,
-                time: curTime
-            });
-
-            console.log('Object for sending: ', content);
-
-            fetch(OPTIONS.TARGETURL, {
-                method: 'post',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(content)
-            })
-                .then(res => "Inform user about success")
-                .catch(err => "Error");
-        }
+    chrome.tabs.query({
+            currentWindow: true,
+            active: true
+        },
+        (tabs) => sendToServer(tabs[0], content)
     );
+}
+
+async function sendToServer(currentTab, content) {
+    const extendedContent = {
+        srcPageUrl: currentTab.url,
+        time: new Date().toUTCString(),
+        ...(await getContentMetaFromUrl(content.src))
+    };
+
+    console.log('Object for sending: ', extendedContent);
+
+    fetch(OPTIONS.TARGET_URL, {
+        method: 'post',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(extendedContent)
+    })
+    .then(res => "Inform user about success")
+    .catch(err => "Error");
 }
 
 function onContextMenuClick(info, tab) {
     const msg = {
-        command: "getData",
+        command: "getContentData",
         args: []
-    }
+    };
     chrome.tabs.sendMessage(tab.id, msg, handleData);
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create(
-        {
-            "title": "Send to Site.com",
-            "contexts": ["all"],
-            "onclick": onContextMenuClick
+    chrome.contextMenus.create({
+            'title': 'Send to Site.com',
+            'contexts': [
+                'image',
+                'video',
+                'audio',
+                'selection',
+                'page'
+            ],
+            'onclick': onContextMenuClick
         }
     );
-});
-
-chrome.extension.onMessage.addListener(request => {
-    if (request == 'некий объект в фон') {
-        console.log('Принято: ', request); // Inform user about success
-        // handleData(request);
-    }
 });
