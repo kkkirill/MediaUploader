@@ -10,61 +10,78 @@ const OPTIONS = {
     }
 };
 
-async function toDataURI(url) {
-    return fetch(url)
-        .then(response => response.blob())
-        .then(blob => new Promise((resolve, reject) => {
-            const fileReader = new FileReader();
+function toDataURI(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => reject('');
 
-            fileReader.onloadend = () => resolve(fileReader.result);
-            fileReader.onerror = reject;
-            fileReader.readAsDataURL(blob);
-        }));
+        reader.readAsDataURL(blob);
+    });
 }
 
-async function getContentMetaFromUrl(src) {
+async function getContentMetaFromUrl(src, text) {
     const dataObj = {
         url: '',
         dataURI: '',
         filename: '',
-        size: 0
+        size: 0,
+        text: ''
     };
 
     if (!src.length) {
-        return {}
-    } else if (src.startsWith('data:')) {
-        return {url: '', dataURI: src, filename: '', size: 0};
+        return Object.assign(dataObj, { text, size: new Blob([text]).size });
+    }
+    else if (src.startsWith('data:')) {
+        const equalSignsAmount = src.slice(-2).split('=').length - 1;
+        const base64 = src.substring(src.indexOf(',') + 1);
+        const size = Math.ceil(base64.length / 4 * 3) - equalSignsAmount;
+
+        return { url: '', dataURI: src, filename: '', size };
+    } else if (src.startsWith('blob:')) {
+        const blob = await fetch(src, {credentials: 'include'}).then(res => res.blob());
+        const dataURI = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onerror = reject;
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+        });
+
+        return { url: src, dataURI: dataURI, filename: '', size };
     }
 
     try {
-        const response = await fetch(src, {method: 'HEAD'});
+        const response = await fetch(src);
         const contentType = response.headers.get('Content-Type');
         const contentLength = parseInt(response.headers.get('Content-Length'));
         const filename = src.split('#').shift().split('?').shift().split('/').pop();
 
         if (OPTIONS.isBigContentLength(contentType, contentLength)) {
-            Object.assign(dataObj, {url: src, dataURI: '', filename: filename, size: contentLength});
+            return Object.assign(dataObj, { url: src, dataURI: '', filename: filename, size: contentLength });
         }
 
-        const dataURI = await toDataURI(src);
+        const blob = await response.blob();
+        const dataURI = await toDataURI(blob);
 
-        Object.assign(dataObj, {url: src, dataURI: dataURI, filename: filename, size: contentLength});
+        Object.assign(dataObj, { url: src, dataURI: dataURI, filename: filename, size: contentLength });
     } catch (err) {
-        Object.assign(dataObj, {url: '', dataURI: '', filename: '', size: 0});
+        Object.assign(dataObj, { url: '', dataURI: '', filename: '', size: 0 });
     }
 
     return dataObj;
 }
 
 function handleData(content) {
+    console.log(content);
     if ('error' in content || !(content && Object.values(content).some(Boolean))) {
         return;
     }
 
     chrome.tabs.query({
-            currentWindow: true,
-            active: true
-        },
+        currentWindow: true,
+        active: true
+    },
         (tabs) => sendToServer(tabs[0], content)
     );
 }
@@ -73,7 +90,7 @@ async function sendToServer(currentTab, content) {
     const extendedContent = {
         srcPageUrl: currentTab.url,
         time: new Date().toUTCString(),
-        ...(await getContentMetaFromUrl(content.src))
+        ...(await getContentMetaFromUrl(content.src, content.text))
     };
 
     console.log('Object for sending: ', extendedContent);
@@ -86,8 +103,8 @@ async function sendToServer(currentTab, content) {
         },
         body: JSON.stringify(extendedContent)
     })
-    .then(res => "Inform user about success")
-    .catch(err => "Error");
+        .then(res => "Inform user about success")
+        .catch(err => "Error");
 }
 
 function onContextMenuClick(info, tab) {
@@ -100,15 +117,16 @@ function onContextMenuClick(info, tab) {
 
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
-            'title': 'Send to Site.com',
-            'contexts': [
-                'image',
-                'video',
-                'audio',
-                'selection',
-                'page'
-            ],
-            'onclick': onContextMenuClick
-        }
+        'title': 'Send to Site.com',
+        'contexts': [
+            'image',
+            'video',
+            'audio',
+            'selection',
+            'page'
+        ],
+        'onclick': onContextMenuClick
+    }
     );
+    chrome.runtime.onMessage.addListener(async content => handleData(content));
 });

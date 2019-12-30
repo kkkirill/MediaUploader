@@ -11,18 +11,19 @@ function isEncodedDataURI(str) {
     return str.startsWith('data:') && (str.match(/;([^,]+)/) || [])[1] === 'base64';
 }
 
-async function getComputedStyles(target) {
+function getComputedStyles(target) {
     const styles = [
         getComputedStyle(target),
         getComputedStyle(target, ':before'),
         getComputedStyle(target, ':after'),
     ];
-    return styles.filter(e => e.backgroundImage !== 'none')
+
+    return styles.filter(e => e.backgroundImage !== 'none');
 }
 
 async function getPropsFromStyle(target) {
     const imgProps = {};
-    const style = (await getComputedStyles(target))[0];
+    const style = getComputedStyles(target)[0];
 
     if (!style) {
         return imgProps;
@@ -34,9 +35,9 @@ async function getPropsFromStyle(target) {
 
     image.src = src;
 
-    if (isEncodedDataURI(src) || isValidURL(src)) {
-        Object.assign(imgProps, {width: image.width, height: image.height, src: image.src});
-    }
+    // if (isEncodedDataURI(src) || isValidURL(src)) {              //TODO uncomment after tests
+    Object.assign(imgProps, { width: image.width, height: image.height, src: image.src });
+    // }
 
     return imgProps;
 }
@@ -45,7 +46,7 @@ async function handleSvgElement(svg) {
     const svgRect = svg.getBoundingClientRect();
 
     return {
-        src: btoa(svg.outerHTML),
+        src: 'data:image/svg+xml;base64,' + btoa(svg.outerHTML),
         width: svgRect.width,
         height: svgRect.height
     }
@@ -58,7 +59,7 @@ async function handleElement(target, svgs) {
 }
 
 async function getContentData() {
-    const uncheckedTags = ['HTML', 'BODY', 'HEAD', 'SCRIPT'];
+    const uncheckedTags = ['HTML', 'BODY', 'HEAD', 'CANVAS', 'SCRIPT'];
     const contentData = {
         src: '',
         width: 0,
@@ -66,15 +67,18 @@ async function getContentData() {
         text: ''
     };
     const targets = document
-        .elementsFromPoint(window.MediaUploader.event.clientX, window.MediaUploader.event.clientY)
-        .filter(element => uncheckedTags.indexOf(element.tagName) === -1);
-    const svgs = targets.filter(element => element.tagName === 'SVG');
+        .elementsFromPoint(MediaUploader.event.clientX, MediaUploader.event.clientY)
+        .filter(element => uncheckedTags.indexOf(element.tagName) === -1 &&
+            !element.classList.contains(MediaUploader.settings.pin.className));
+    const svgs = targets.filter(element => element.tagName.toUpperCase() === 'SVG');
     let i = 0;
 
     do {
-        Object.assign(contentData, await window.MediaUploader.handlers[targets[i].tagName](targets[i++], svgs));
-        contentData.text = !(contentData.url || contentData.data) ? window.getSelection().toString() : '';
-    } while (!Object.values(contentData).some(Boolean) || i < targets.length);
+        Object.assign(contentData, await MediaUploader.handlers[targets[i].tagName](targets[i], svgs));
+        i++;
+    } while (!Object.values(contentData).some(Boolean) && i < targets.length);
+
+    contentData.text = !contentData.src ? window.getSelection().toString() : '';
 
     return contentData;
 }
@@ -82,16 +86,17 @@ async function getContentData() {
 function handleMessage(request, sender, sendResponse) {
     window[request.command](...request.args)
         .then(data => sendResponse(data))
-        .catch(reason => sendResponse({error: reason}));
+        .catch(reason => sendResponse({ error: reason }));
 
     return true;
 }
 
 function saveEvent(e) {
-    window.MediaUploader.event = e;
+    MediaUploader.event = e;
 }
 
 function main(isAddFlag = true) {
+    const parts = window.location.hostname.split('.');
     const handler = {
         get(target, prop) {
             return prop in target ? target[prop] : handleElement;
@@ -117,80 +122,157 @@ function main(isAddFlag = true) {
             minTargetWidth: 50,
             minTargetHeight: 50,
             pin: {
+                className: 'media-uploader-pin',
                 width: 20,
                 height: 20,
                 paddingTop: 10,
                 paddingRight: 10
-            },
-            popup: {
-                cssLinkClassName: 'RANDOMNAME',
-                cssLinkHref: '../css/hover.css'
             }
         },
         handlers: new Proxy(tags, handler),
-        event: null
+        hostname: parts[parts.length - 2],
+        allowedTags: ['IMG', 'VIDEO', 'DIV', 'SVG'],
+        event: null,
+        buttons: [],
+        observer: null,
+        observerConfig: {
+            childList: true,
+            subtree: true
+        }
     };
 
     const manageEventListenerAttr = isAddFlag ? 'addEventListener' : 'removeEventListener';
     const manageChromeListenerAttr = manageEventListenerAttr.replace('Event', '');
-    const link = document.createElement('link');
 
-    link.rel = 'stylesheet';
-    link.type = 'text/css';
-    link.href = window.MediaUploader.settings.popup.cssLinkHref;
-    link.className = window.MediaUploader.settings.popup.cssLinkClassName;
-    document.querySelector('head').appendChild(link);
-
-    manageHoverEvents(isAddFlag);
+    manageHoverEvents(false);
 
     chrome.runtime.onMessage[manageChromeListenerAttr](handleMessage);
     document[manageEventListenerAttr]('contextmenu', saveEvent);
+
+    MediaUploader.observer = new MutationObserver(handleMutatitions);
+
+    MediaUploader.observer.observe(document.body, MediaUploader.observerConfig);
 }
 
-//TODO change hovers
-function manageHoverEvents(isAddFlag = true) {
+function getToggleState() {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.get(['isEnabled'], dict => {
+            if (dict.isEnabled === 'undefined') {
+                chrome.storage.local.set({ isEnabled: false });
+                resolve(false);
+            }
+            else {
+                resolve(dict.isEnabled);
+            }
+        });
+    });
+}
+
+function handleMutatitions(mutations) {
+    getToggleState().then((isEnabled) => {
+        if (isEnabled) {
+            const fmutations = mutations.filter(mutation => MediaUploader.allowedTags.includes(mutation.target.tagName.toUpperCase()));
+            
+            const addedNodes = [...new Set(fmutations.filter(mutation => mutation.addedNodes.length)
+                .map(mutation => mutation.target))];
+            const removedNodes = fmutations.filter(mutations => mutations.removedNodes.length)
+                .map(mutation => mutation.target);
+
+            addedNodes.filter(node => node.className !== MediaUploader.settings.pin.className).forEach(node => setHoverButton(node, node.tagName, isEnabled));
+            removedNodes.filter(node => node.className !== MediaUploader.settings.pin.className).forEach(node => removeHoverButtons(node));
+        } else {
+            removeHoverButtons();
+        }
+    },
+        (error) => console.log(error)
+    );
+}
+
+function setHoverButton(target, tag, isAddFlag) {
     const manageEventListenerAttr = isAddFlag ? 'addEventListener' : 'removeEventListener';
-    const tags = ['img', 'video', 'svg']; //TODO process svg correctly
-    const minHeight = window.MediaUploader.minElementHeight;
-    const minWidth = window.MediaUploader.minElementWidth;
 
-    tags.forEach(tag => {
-        const targets = document.querySelectorAll(tag);
-        [].filter.call(targets, target => target.offsetHeight > minHeight && target.offsetWidth > minWidth)
-            .forEach(target => {
-                target[manageEventListenerAttr]('mouseenter', changeDefOver);
-                target[manageEventListenerAttr]('mouseleave', changeDefOut);
-            });
-    });
-
-    const divs = document.getElementsByTagName('div');
-    const divsWithImages = [].filter.call(divs, elem =>
-        getComputedStyles(elem).length !== 0 && elem.offsetWidth > minHeight && elem.offsetHeight > minWidth);
-    divsWithImages.forEach(div => {
-        div[manageEventListenerAttr]('mouseenter', changeDefOver);
-        div[manageEventListenerAttr]('mouseleave', changeDefOut);
-    });
+    MediaUploader.tag = tag;
+    if (isAddFlag) {
+        if (MediaUploader.hostname === 'instagram') {
+            createHoverButton(target);
+        }
+        else {
+            target[manageEventListenerAttr]('mouseenter', changeDefOver);
+            target[manageEventListenerAttr]('mouseleave', changeDefOut);
+        }
+    }
 }
 
-function changeDefOver(e) {
-    const button = document.createElement('button');
+function createHoverButton(target) {
+    changeDefOver({ target })
+        .then(() => MediaUploader.buttons[0].style.opacity = 1)
+        .catch(error => console.log(error));
+}
 
-    button.id = "lol";       // TODO unique classname/id
-    // [].push.call(button.classList, 'test-transition');
-    button.onclick = clickEvent => {
+function removeHoverButtons(parent) {
+    (parent ? parent : document).querySelectorAll(`.${MediaUploader.settings.pin.className}`).forEach(e => e.remove());
+}
+
+
+async function manageHoverEvents(isAddFlag = false) {
+    const minHeight = MediaUploader.settings.minTargetHeight;
+    const minWidth = MediaUploader.settings.minTargetWidth;
+
+    MediaUploader.allowedTags.slice(0, -1).forEach(tag => {
+        const targets = document.querySelectorAll(tag);
+
+        [].filter.call(targets, target => {
+            const sizeRect = target.getBoundingClientRect();
+
+            const sizeFlag = sizeRect.height > minHeight && sizeRect.width > minWidth;
+            const divStyleFlag = target.tagName.toUpperCase() === 'DIV' ? getComputedStyles(target).length !== 0 : true;
+
+            return (sizeFlag && divStyleFlag);
+        }).forEach(target => setHoverButton(target, target.tagName, isAddFlag));
+    });
+
+    const svgs = document.getElementsByTagName('SVG');
+
+    [].filter.call(svgs, target => {
+        const sizeRect = target.getBoundingClientRect();
+
+        return sizeRect.height > minHeight && sizeRect.width > minWidth;
+    }).forEach(target => setHoverButton(target, target.tagName, isAddFlag));
+}
+
+async function changeDefOver(e) {
+    MediaUploader.observer.disconnect();
+
+    const tag = MediaUploader.tag;
+    const button = document.createElement('button');
+    const style = getComputedStyles(e.target);
+
+    button.className = MediaUploader.settings.pin.className;
+    button.onclick = async clickEvent => {
         clickEvent.stopPropagation();
-        console.log(clickEvent);
-        clickEvent.target = clickEvent.target.parentElement;
-        saveEvent(clickEvent);
-        console.log('target: ', window.MediaUploader.event);
-        // chrome.extension.sendMessage(getData());
+
+        const createdEvent = new MouseEvent('contextmenu', {
+            bubbles: false,
+            cancelable: true,
+            view: window,
+            screenX: clickEvent.screenX,
+            screenY: clickEvent.screenY,
+            clientX: clickEvent.clientX,
+            clientY: clickEvent.clientY
+        });
+        const rtarget = e.target.querySelector(`${tag}.${tag.className}`);
+
+        (rtarget ? rtarget : e.target).dispatchEvent(createdEvent);
+        saveEvent(createdEvent);
+        chrome.runtime.sendMessage(await getContentData());
     };
 
     button.addEventListener('mouseenter', () => button.style.opacity = 1);
 
-    const height = window.MediaUploader.pin.height, width = window.MediaUploader.pin.width;
-    const paddingLeft = e.target.offsetLeft + e.target.offsetWidth - height - window.MediaUploader.pin.paddingRight;
-    const paddingTop = e.target.offsetTop + window.MediaUploader.pin.paddingTop;
+    const height = MediaUploader.settings.pin.height, width = MediaUploader.settings.pin.width;
+    const sizeRect = e.target.getBoundingClientRect();
+    const paddingLeft = sizeRect.left + window.pageXOffset + sizeRect.width - height - MediaUploader.settings.pin.paddingRight;
+    const paddingTop = sizeRect.top + window.pageYOffset + MediaUploader.settings.pin.paddingTop;
 
     Object.assign(button.style, {
         position: 'absolute',
@@ -201,26 +283,20 @@ function changeDefOver(e) {
         opacity: 0,
         transition: "opacity 0.4s",
         backgroundColor: "red",
-        'z-index': 10000000000
+        'z-index': +(style.zIndex !== undefined ? style.zIndex : 1) * 5
     });
 
-    console.log('Height: ', height, 'Width: ', width);
-
-    setTimeout(() => button.style.opacity = 1, 10);
-
-    window.MediaUploader.button = button;
-    console.log('Added');
-    e.target.parentElement.append(button);
+    setTimeout(() => button.style.opacity = 1, 5);
+    MediaUploader.buttons.unshift(button);
+    document.body.append(button);
+    MediaUploader.observer.observe(document.body, MediaUploader.observerConfig);
 }
 
 function changeDefOut(e) {
-    if (e.toElement !== window.MediaUploader.button) {
-        window, MediaUploader.button.style.opacity = 0;
-        setTimeout(() =>
-                window.MediaUploader.button.parentElement.querySelectorAll('#lol')
-                    .forEach(e => e.remove()),
-            1000);
-        console.log('Removed');
+    if (e.toElement === null || e.toElement.className !== MediaUploader.settings.pin.className && MediaUploader.buttons.length) {
+        MediaUploader.buttons[0].style.opacity = 0;
+        MediaUploader.buttons.forEach(button => button.remove());
+        MediaUploader.buttons = [];
     }
 }
 

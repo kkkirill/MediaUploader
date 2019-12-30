@@ -77,7 +77,6 @@ input:checked + .slider:before {
 
 .on
 {
-    /* display: none; */
     opacity: 0;
 }
 
@@ -98,14 +97,12 @@ input:checked + .slider:before {
 
 input:checked + .slider .on
 {
-    /* display: block; */
     opacity: 1;
     transition: opacity 0.5s;
 }
 
 input:checked + .slider .off
 {
-    /* display: none; */
     opacity: 0;
     transition: opacity 0.5s;
 }
